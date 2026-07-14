@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Didikhand Teleprompter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@600&family=Merriweather:wght@700&family=Lora:wght@600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --amber:#ffb000;
+    --amber-dim:#7a5400;
+    --ink:#0b0b0d;
+    --panel:#101015;
+    --panel-2:#17171f;
+    --line:#26262f;
+    --muted:#8a8a95;
+    --bg:#000000;
+    --txt:#ffffff;
+    --size:8vw;
+    --lh:1.5;
+    --col:92%;
+    --guide:30vh;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg);color:#fff;overflow:hidden;overscroll-behavior:none;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    touch-action:none;
+  }
+
+  /* ---------- PROMPTER STAGE ---------- */
+  #stage{position:fixed;inset:0;background:var(--bg);overflow:hidden;z-index:1;}
+  #mirror{position:absolute;inset:0;transform-origin:center;}
+  #script{
+    position:absolute;left:50%;top:0;width:var(--col);transform:translate(-50%,0);
+    padding-top:var(--guide);padding-bottom:92vh;
+    color:var(--txt);font-size:var(--size);line-height:var(--lh);
+    font-weight:600;letter-spacing:.005em;white-space:pre-wrap;word-break:break-word;
+    will-change:transform;
+  }
+  /* the translateY lives on an inner wrapper so mirror + centering stay intact */
+  #feed{transform:translateY(0);will-change:transform;}
+
+  /* fade top & bottom for a pro look */
+  .fade{position:absolute;left:0;right:0;height:20vh;pointer-events:none;z-index:3;}
+  .fade.top{top:0;background:linear-gradient(var(--bg),rgba(0,0,0,0));}
+  .fade.bot{bottom:0;background:linear-gradient(rgba(0,0,0,0),var(--bg));}
+
+  /* reading guide */
+  #guide{position:absolute;left:0;right:0;top:var(--guide);z-index:4;pointer-events:none;
+    display:flex;align-items:center;justify-content:space-between;
+    transform:translateY(-50%);transition:opacity .2s;}
+  #guide::before{content:"";position:absolute;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,rgba(255,176,0,.5),transparent);}
+  .tri{width:0;height:0;border-top:12px solid transparent;border-bottom:12px solid transparent;}
+  .tri.l{border-left:16px solid var(--amber);filter:drop-shadow(0 0 4px rgba(255,176,0,.6));}
+  .tri.r{border-right:16px solid var(--amber);filter:drop-shadow(0 0 4px rgba(255,176,0,.6));}
+  #stage.noguide #guide{opacity:0;}
+
+  /* progress bar */
+  #bar{position:absolute;top:0;left:0;height:3px;width:0;background:var(--amber);
+    box-shadow:0 0 8px var(--amber);z-index:5;transition:width .05s linear;}
+
+  /* countdown */
+  #count{position:absolute;inset:0;z-index:8;display:none;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.55);font-size:34vw;font-weight:800;color:var(--amber);
+    text-shadow:0 0 30px rgba(255,176,0,.4);font-family:"Oswald",system-ui,sans-serif;}
+  #done{position:absolute;left:0;right:0;top:calc(var(--guide) + 40px);z-index:6;text-align:center;
+    color:var(--muted);font-size:15px;letter-spacing:.1em;display:none;}
+
+  /* ---------- FLOATING CONTROL CLUSTER ---------- */
+  #cluster{
+    position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(16px + env(safe-area-inset-bottom));z-index:9;
+    display:flex;align-items:center;gap:6px;
+    background:rgba(16,16,21,.82);backdrop-filter:blur(8px);
+    border:1px solid var(--line);border-radius:16px;padding:8px;
+    box-shadow:0 8px 26px rgba(0,0,0,.5);
+  }
+  #cluster.hidden{display:none;}
+  .ic{background:var(--panel-2);border:1px solid var(--line);color:#fff;
+    min-width:44px;height:44px;border-radius:11px;font-size:17px;line-height:1;
+    display:inline-flex;align-items:center;justify-content:center;font-family:inherit;}
+  .ic.wide{padding:0 12px;}
+  .ic.on{background:var(--amber);color:#1a1206;border-color:var(--amber);}
+  .ic.play{background:var(--amber);color:#1a1206;border-color:var(--amber);font-size:19px;min-width:52px;}
+  .spd{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    min-width:52px;color:var(--muted);font-size:10px;line-height:1.1;
+    font-family:ui-monospace,Menlo,monospace;}
+  .spd b{color:var(--amber);font-size:16px;}
+
+  /* ---------- SETTINGS / SCRIPT PANEL ---------- */
+  #panel{
+    position:fixed;left:0;right:0;bottom:0;z-index:10;
+    background:linear-gradient(180deg,var(--panel) 0%,#0a0a0d 100%);
+    border-top:1px solid var(--line);box-shadow:0 -18px 40px rgba(0,0,0,.6);
+    max-height:80vh;display:flex;flex-direction:column;
+    transform:translateY(0);transition:transform .28s cubic-bezier(.4,0,.2,1);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  #panel.hidden{transform:translateY(100%);}
+  .grab{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 8px;border-bottom:1px solid var(--line);}
+  .brand{display:flex;align-items:center;gap:9px;font-family:"Oswald",system-ui,sans-serif;
+    font-weight:600;letter-spacing:.14em;font-size:13px;color:var(--amber);text-shadow:0 0 10px rgba(255,176,0,.35);}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--amber);box-shadow:0 0 8px var(--amber);}
+  .grab .close{background:var(--panel-2);border:1px solid var(--line);color:var(--muted);width:34px;height:28px;border-radius:8px;font-size:15px;}
+  .scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px 18px;}
+
+  label.fld{display:block;margin-bottom:15px;}
+  .cap{display:block;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:7px;font-weight:600;font-family:ui-monospace,Menlo,monospace;}
+  .val{color:var(--amber);}
+
+  textarea,select{width:100%;background:var(--ink);border:1px solid var(--line);color:#fff;
+    border-radius:11px;padding:12px;font-size:15px;font-family:inherit;line-height:1.5;}
+  textarea{resize:vertical;min-height:120px;}
+  select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%23ffb000' stroke-width='1.6'/></svg>");background-repeat:no-repeat;background-position:right 14px center;padding-right:34px;}
+  textarea:focus,select:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 2px rgba(255,176,0,.18);}
+
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:5px;background:var(--line);margin:8px 0 2px;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--amber);border:2px solid #1a1206;box-shadow:0 0 10px rgba(255,176,0,.5);}
+  input[type=range]::-moz-range-thumb{width:22px;height:22px;border:2px solid #1a1206;border-radius:50%;background:var(--amber);}
+
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .swatches{display:flex;gap:9px;flex-wrap:wrap;align-items:center;}
+  .sw{width:30px;height:30px;border-radius:50%;border:2px solid #2c2c34;position:relative;}
+  .sw.on{border-color:#fff;box-shadow:0 0 0 2px var(--amber);}
+  .sw.pick{background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red);}
+  .sw.pick input{position:absolute;inset:0;opacity:0;width:100%;height:100%;border:0;padding:0;}
+
+  .toggles{display:flex;gap:8px;flex-wrap:wrap;}
+  .chip{background:var(--ink);border:1px solid var(--line);color:var(--muted);padding:9px 13px;border-radius:999px;font-size:13px;font-weight:600;font-family:inherit;}
+  .chip.on{background:var(--amber);color:#1a1206;border-color:var(--amber);}
+
+  .est{font-size:12px;color:var(--muted);margin:-4px 0 14px;font-family:ui-monospace,Menlo,monospace;}
+  .est b{color:var(--amber);}
+  #startBtn{width:100%;border:0;border-radius:12px;padding:16px;font-size:16px;font-weight:800;font-family:inherit;
+    letter-spacing:.03em;background:var(--amber);color:#1a1206;box-shadow:0 6px 18px rgba(255,176,0,.28);}
+  .hint{font-size:11px;color:var(--muted);text-align:center;margin-top:12px;line-height:1.6;}
+</style>
+</head>
+<body>
+
+  <div id="stage">
+    <div id="bar"></div>
+    <div id="mirror">
+      <div id="script"><div id="feed"></div></div>
+    </div>
+    <div class="fade top"></div>
+    <div class="fade bot"></div>
+    <div id="guide"><div class="tri l"></div><div class="tri r"></div></div>
+    <div id="done">— selesai —</div>
+    <div id="count"></div>
+  </div>
+
+  <div id="cluster" class="hidden">
+    <button class="ic" id="editBtn" title="Naskah & pengaturan">⚙</button>
+    <button class="ic" id="restartBtn" title="Ulang dari atas">⟲</button>
+    <button class="ic" id="slowBtn" title="Pelankan">–</button>
+    <div class="spd">kecepatan<b id="spdVal">30</b></div>
+    <button class="ic" id="fastBtn" title="Cepatkan">+</button>
+    <button class="ic play" id="playBtn" title="Putar / Jeda">▶</button>
+    <button class="ic" id="mirrorBtn" title="Cermin">↔</button>
+  </div>
+
+  <div id="panel">
+    <div class="grab">
+      <div class="brand"><span class="dot"></span>DIDIKHAND TELEPROMPTER</div>
+      <button class="close" id="closeBtn" aria-label="Tutup panel">▾</button>
+    </div>
+    <div class="scroll">
+      <label class="fld">
+        <span class="cap">Naskah</span>
+        <textarea id="text" rows="6" placeholder="Tempel atau ketik naskahmu di sini…">Selamat datang di teleprompter.
+
+Tempelkan naskahmu di sini, atur ukuran huruf dan kecepatan, lalu tekan Mulai. Teks akan bergulir naik perlahan sejajar dengan garis penanda di layar.
+
+Ketuk layar sekali untuk menjeda atau melanjutkan. Geser naik-turun untuk memundurkan atau memajukan naskah. Aktifkan mode Cermin bila kamu memakai kaca pemantul di depan lensa kamera.
+
+Selamat merekam!</textarea>
+      </label>
+
+      <div class="row2">
+        <label class="fld">
+          <span class="cap">Kecepatan · <span class="val" id="speedVal">30</span></span>
+          <input type="range" id="speed" min="1" max="100" value="30">
+        </label>
+        <label class="fld">
+          <span class="cap">Ukuran huruf · <span class="val" id="sizeVal">8</span></span>
+          <input type="range" id="size" min="4" max="18" value="8">
+        </label>
+      </div>
+
+      <div class="row2">
+        <label class="fld">
+          <span class="cap">Jarak baris · <span class="val" id="lhVal">1.5</span></span>
+          <input type="range" id="lh" min="11" max="24" value="15">
+        </label>
+        <label class="fld">
+          <span class="cap">Lebar teks · <span class="val" id="colVal">92</span>%</span>
+          <input type="range" id="col" min="50" max="100" value="92">
+        </label>
+      </div>
+
+      <label class="fld">
+        <span class="cap">Font</span>
+        <select id="font">
+          <option value="system-ui,-apple-system,sans-serif" selected>Sans (default)</option>
+          <option value="'Oswald',sans-serif">Oswald — ramping</option>
+          <option value="'Bebas Neue',sans-serif">Bebas Neue — tinggi</option>
+          <option value="'Anton',Impact,sans-serif">Anton — tebal</option>
+          <option value="'Merriweather',Georgia,serif">Merriweather — serif</option>
+          <option value="'Lora',Georgia,serif">Lora — serif lembut</option>
+          <option value="Georgia,'Times New Roman',serif">Georgia</option>
+          <option value="ui-monospace,Menlo,Consolas,monospace">Monospace</option>
+        </select>
+      </label>
+
+      <div class="fld">
+        <span class="cap">Warna teks</span>
+        <div class="swatches" id="swatches">
+          <button class="sw on" style="background:#ffffff" data-c="#ffffff"></button>
+          <button class="sw" style="background:#fff2d6" data-c="#fff2d6"></button>
+          <button class="sw" style="background:#ffb000" data-c="#ffb000"></button>
+          <button class="sw" style="background:#7dff9b" data-c="#7dff9b"></button>
+          <button class="sw" style="background:#8fd6ff" data-c="#8fd6ff"></button>
+          <label class="sw pick" title="Warna bebas"><input type="color" id="colorPick" value="#ffffff"></label>
+        </div>
+      </div>
+
+      <div class="fld">
+        <span class="cap">Opsi</span>
+        <div class="toggles" id="opts">
+          <button class="chip" data-o="mirrorX">Cermin ↔</button>
+          <button class="chip" data-o="mirrorY">Balik ↕</button>
+          <button class="chip on" data-o="guide">Garis bantu</button>
+          <button class="chip on" data-o="countdown">Hitung mundur</button>
+        </div>
+      </div>
+
+      <p class="est">Estimasi durasi: <b id="estVal">–</b> · <span id="wordVal">0</span> kata</p>
+
+      <button id="startBtn">▶ Mulai dari atas</button>
+
+      <p class="hint">Saat berjalan: <b>ketuk</b> layar = jeda/lanjut · <b>geser</b> = maju/mundur naskah · tombol –/+ atur kecepatan langsung. Layar dijaga tetap menyala.</p>
+    </div>
+  </div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id);};
+  var stage=$('stage'),mirror=$('mirror'),feed=$('feed'),bar=$('bar'),
+      guide=$('guide'),panel=$('panel'),cluster=$('cluster'),
+      countEl=$('count'),doneEl=$('done');
+
+  var state={
+    text:$('text').value,
+    speed:30,size:8,lh:15,col:92,
+    font:"system-ui,-apple-system,sans-serif",color:'#ffffff',
+    mirrorX:false,mirrorY:false,guide:true,countdown:true
+  };
+  try{var s=localStorage.getItem('tp-state');if(s)state=Object.assign(state,JSON.parse(s));}catch(e){}
+  function save(){try{localStorage.setItem('tp-state',JSON.stringify(state));}catch(e){}}
+
+  var offset=0, maxScroll=1, playing=false, lastTs=0, ended=false;
+
+  function pps(){ return 8 + (state.speed-1)/99*(300-8); }   // px per second
+
+  function applyStyle(){
+    var r=document.documentElement.style;
+    r.setProperty('--size',state.size+'vw');
+    r.setProperty('--lh',(state.lh/10).toFixed(2));
+    r.setProperty('--col',state.col+'%');
+    r.setProperty('--txt',state.color);
+    feed.parentNode.style.fontFamily=state.font;   // #script
+    var t='';
+    if(state.mirrorX) t+=' scaleX(-1)';
+    if(state.mirrorY) t+=' scaleY(-1)';
+    mirror.style.transform=t.trim();
+    stage.classList.toggle('noguide',!state.guide);
+    $('mirrorBtn').classList.toggle('on',state.mirrorX||state.mirrorY);
+  }
+
+  function setText(){ feed.textContent=state.text; }
+
+  function measure(){
+    // scrollHeight of #script (includes paddings); minus visible height
+    var sc=feed.parentNode;               // #script
+    maxScroll=Math.max(1, sc.scrollHeight - stage.clientHeight);
+    if(offset<-maxScroll) offset=-maxScroll;
+    apply();
+    updateEst();
+  }
+
+  function apply(){
+    feed.style.transform='translateY('+offset+'px)';
+    bar.style.width=(Math.min(1,(-offset)/maxScroll)*100)+'%';
+  }
+
+  function updateEst(){
+    var secs=maxScroll/pps();
+    var m=Math.floor(secs/60), s=Math.round(secs%60);
+    $('estVal').textContent=(m>0? m+"m ":"")+s+"s";
+    var w=state.text.trim().split(/\s+/).filter(Boolean).length;
+    $('wordVal').textContent=w;
+  }
+
+  // ---- animation loop ----
+  function tick(ts){
+    if(playing){
+      if(lastTs){
+        var dt=(ts-lastTs)/1000;
+        offset-=pps()*dt;
+        if(offset<=-maxScroll){ offset=-maxScroll; playing=false; ended=true; doneEl.style.display='block'; syncPlay(); }
+        apply();
+      }
+      lastTs=ts;
+    } else { lastTs=0; }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  function syncPlay(){ $('playBtn').textContent=playing?'⏸':'▶'; }
+  function play(){ if(ended){offset=0;ended=false;doneEl.style.display='none';} playing=true; syncPlay(); requestWake(); }
+  function pause(){ playing=false; syncPlay(); }
+  function toggle(){ playing?pause():play(); }
+
+  // ---- panel / cluster visibility ----
+  function setPanel(open){
+    panel.classList.toggle('hidden',!open);
+    cluster.classList.toggle('hidden',open);
+    if(open) pause();
+  }
+  $('closeBtn').addEventListener('click',function(){ setPanel(false); });
+  $('editBtn').addEventListener('click',function(){ setPanel(true); });
+
+  // ---- start from top ----
+  function startFromTop(){
+    setText(); measure();
+    offset=0; ended=false; doneEl.style.display='none'; apply();
+    setPanel(false);
+    goFullscreen();
+    if(state.countdown) runCountdown(function(){ play(); });
+    else play();
+  }
+  $('startBtn').addEventListener('click',startFromTop);
+  $('restartBtn').addEventListener('click',function(){ offset=0; ended=false; doneEl.style.display='none'; apply(); play(); });
+
+  function runCountdown(done){
+    var n=3; countEl.style.display='flex'; countEl.textContent=n; pause();
+    var skip=function(){ clearInterval(iv); countEl.style.display='none'; countEl.removeEventListener('click',skip); done(); };
+    countEl.addEventListener('click',skip);
+    var iv=setInterval(function(){
+      n--;
+      if(n<=0){ clearInterval(iv); countEl.style.display='none'; countEl.removeEventListener('click',skip); done(); }
+      else countEl.textContent=n;
+    },700);
+  }
+
+  // ---- play controls ----
+  $('playBtn').addEventListener('click',toggle);
+  $('mirrorBtn').addEventListener('click',function(){
+    state.mirrorX=!state.mirrorX; applyStyle(); save();
+    document.querySelector('#opts .chip[data-o=mirrorX]').classList.toggle('on',state.mirrorX);
+  });
+  function bump(d){
+    state.speed=Math.max(1,Math.min(100,state.speed+d));
+    $('speed').value=state.speed; reflectSpeed(); save();
+  }
+  $('slowBtn').addEventListener('click',function(){ bump(-5); });
+  $('fastBtn').addEventListener('click',function(){ bump(5); });
+  function reflectSpeed(){ $('speedVal').textContent=state.speed; $('spdVal').textContent=state.speed; updateEst(); }
+
+  // ---- tap vs drag on the reading area ----
+  var dragging=false,moved=false,startY=0,startOff=0;
+  stage.addEventListener('pointerdown',function(e){
+    if(!panel.classList.contains('hidden')) return;      // panel open -> ignore
+    if(countEl.style.display==='flex') return;
+    dragging=true; moved=false; startY=e.clientY; startOff=offset;
+    try{stage.setPointerCapture(e.pointerId);}catch(_){}
+    if(playing) pause();
+  });
+  stage.addEventListener('pointermove',function(e){
+    if(!dragging) return;
+    var dy=e.clientY-startY;
+    if(Math.abs(dy)>6) moved=true;
+    offset=Math.max(-maxScroll,Math.min(0,startOff+dy));
+    if(ended && offset<0){ ended=false; doneEl.style.display='none'; }
+    apply();
+  });
+  stage.addEventListener('pointerup',function(e){
+    if(!dragging) return; dragging=false;
+    if(!moved) toggle();     // a tap toggles play/pause
+  });
+
+  // ---- settings bindings ----
+  $('text').value=state.text;
+  $('text').addEventListener('input',function(){ state.text=this.value; setText(); measure(); save(); });
+
+  $('speed').value=state.speed;
+  $('speed').addEventListener('input',function(){ state.speed=+this.value; reflectSpeed(); save(); });
+
+  $('size').value=state.size; $('sizeVal').textContent=state.size;
+  $('size').addEventListener('input',function(){ state.size=+this.value; $('sizeVal').textContent=this.value; applyStyle(); measure(); save(); });
+
+  $('lh').value=state.lh; $('lhVal').textContent=(state.lh/10).toFixed(1);
+  $('lh').addEventListener('input',function(){ state.lh=+this.value; $('lhVal').textContent=(this.value/10).toFixed(1); applyStyle(); measure(); save(); });
+
+  $('col').value=state.col; $('colVal').textContent=state.col;
+  $('col').addEventListener('input',function(){ state.col=+this.value; $('colVal').textContent=this.value; applyStyle(); measure(); save(); });
+
+  $('font').value=state.font;
+  $('font').addEventListener('change',function(){ state.font=this.value; applyStyle(); measure(); save(); });
+
+  function selColor(c){
+    state.color=c;
+    document.querySelectorAll('#swatches .sw').forEach(function(b){
+      b.classList.toggle('on', b.dataset.c && b.dataset.c.toLowerCase()===c.toLowerCase());
+    });
+    $('colorPick').value=/^#([0-9a-f]{6})$/i.test(c)?c:'#ffffff';
+    applyStyle(); save();
+  }
+  document.querySelectorAll('#swatches .sw[data-c]').forEach(function(b){
+    b.addEventListener('click',function(){ selColor(this.dataset.c); });
+  });
+  $('colorPick').addEventListener('input',function(){
+    state.color=this.value;
+    document.querySelectorAll('#swatches .sw').forEach(function(b){ b.classList.remove('on'); });
+    applyStyle(); save();
+  });
+
+  document.querySelectorAll('#opts .chip').forEach(function(b){
+    var k=b.dataset.o; b.classList.toggle('on',!!state[k]);
+    b.addEventListener('click',function(){
+      state[k]=!state[k]; this.classList.toggle('on',state[k]); applyStyle(); save();
+    });
+  });
+
+  // ---- keyboard (desktop bonus) ----
+  window.addEventListener('keydown',function(e){
+    if(e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT') return;
+    if(e.code==='Space'){ e.preventDefault(); toggle(); }
+    else if(e.code==='ArrowUp'){ bump(5); }
+    else if(e.code==='ArrowDown'){ bump(-5); }
+    else if(e.key==='r'||e.key==='R'){ offset=0; ended=false; doneEl.style.display='none'; apply(); }
+  });
+
+  // ---- fullscreen + wake lock ----
+  var wakeLock=null;
+  async function requestWake(){ try{ if('wakeLock' in navigator) wakeLock=await navigator.wakeLock.request('screen'); }catch(e){} }
+  document.addEventListener('visibilitychange',function(){ if(wakeLock&&document.visibilityState==='visible') requestWake(); });
+  function goFullscreen(){ var el=document.documentElement,fn=el.requestFullscreen||el.webkitRequestFullscreen; if(fn){try{fn.call(el);}catch(e){}} }
+
+  window.addEventListener('resize',measure);
+  window.addEventListener('orientationchange',function(){ setTimeout(measure,300); });
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(measure);
+
+  // ---- init ----
+  applyStyle(); setText(); reflectSpeed();
+  selColor(state.color);
+  requestAnimationFrame(measure);
+  requestWake();
+})();
+</script>
+</body>
+</html>
