@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<title>Didikhand Teleprompter</title>
+<title>Teleprompter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@600&family=Merriweather:wght@700&family=Lora:wght@600&display=swap" rel="stylesheet">
@@ -25,6 +25,7 @@
     --lh:1.5;
     --col:92%;
     --guide:30vh;
+    --dim:.35;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;margin:0;}
@@ -36,7 +37,10 @@
 
   /* ---------- PROMPTER STAGE ---------- */
   #stage{position:fixed;inset:0;background:var(--bg);overflow:hidden;z-index:1;}
-  #mirror{position:absolute;inset:0;transform-origin:center;}
+  #cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:0;pointer-events:none;}
+  #cam.mir{transform:scaleX(-1);}
+  #scrim{position:absolute;inset:0;background:#000;opacity:var(--dim);z-index:1;pointer-events:none;}
+  #mirror{position:absolute;inset:0;transform-origin:center;z-index:2;}
   #script{
     position:absolute;left:50%;top:0;width:var(--col);transform:translate(-50%,0);
     padding-top:var(--guide);padding-bottom:92vh;
@@ -66,6 +70,37 @@
   /* progress bar */
   #bar{position:absolute;top:0;left:0;height:3px;width:0;background:var(--amber);
     box-shadow:0 0 8px var(--amber);z-index:5;transition:width .05s linear;}
+
+  /* record button + timer + toast + save card */
+  #recBtn{position:fixed;top:calc(14px + env(safe-area-inset-top));right:14px;z-index:9;
+    width:56px;height:56px;border-radius:50%;border:3px solid rgba(255,255,255,.85);
+    background:#e11;box-shadow:0 4px 16px rgba(0,0,0,.5);}
+  #recBtn.hidden{display:none;}
+  #recBtn::after{content:"";position:absolute;inset:0;margin:auto;width:22px;height:22px;border-radius:50%;background:#fff;transition:.15s;}
+  #recBtn.rec::after{width:20px;height:20px;border-radius:4px;}
+  #recBtn.rec{animation:recpulse 1.2s ease-in-out infinite;}
+  @keyframes recpulse{0%,100%{box-shadow:0 0 0 0 rgba(238,17,17,.55);}50%{box-shadow:0 0 0 12px rgba(238,17,17,0);}}
+  #recTime{position:fixed;top:calc(26px + env(safe-area-inset-top));right:80px;z-index:9;
+    background:rgba(0,0,0,.6);color:#fff;border:1px solid var(--line);border-radius:8px;
+    padding:6px 10px;font-family:ui-monospace,Menlo,monospace;font-size:14px;letter-spacing:.05em;}
+  #recTime.hidden{display:none;}
+  #toast{position:fixed;top:calc(18px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);
+    z-index:13;max-width:88%;background:rgba(20,20,26,.96);border:1px solid var(--line);color:#fff;
+    padding:11px 15px;border-radius:12px;font-size:13px;line-height:1.45;box-shadow:0 8px 24px rgba(0,0,0,.5);display:none;text-align:center;}
+  #saveCard{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);
+    z-index:11;width:min(92vw,420px);background:var(--panel);border:1px solid var(--line);
+    border-radius:16px;padding:12px;box-shadow:0 12px 40px rgba(0,0,0,.6);}
+  #saveCard.hidden{display:none;}
+  #saveCard .lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+    font-family:ui-monospace,Menlo,monospace;margin:0 0 8px;font-weight:600;}
+  #saveCard video{width:100%;border-radius:10px;background:#000;max-height:40vh;}
+  .saverow{display:flex;gap:10px;margin-top:10px;}
+  .saverow a,.saverow button{flex:1;text-align:center;border-radius:11px;padding:12px;font-weight:800;font-family:inherit;font-size:14px;text-decoration:none;border:0;}
+  #saveDl{background:var(--amber);color:#1a1206;}
+  #saveClose{background:var(--panel-2);color:#fff;border:1px solid var(--line);}
+  .seg{display:flex;background:var(--ink);border:1px solid var(--line);border-radius:11px;padding:3px;gap:3px;}
+  .seg button{flex:1;background:transparent;border:0;color:var(--muted);padding:9px 6px;border-radius:8px;font-size:13px;font-weight:600;font-family:inherit;}
+  .seg button.on{background:var(--amber);color:#1a1206;}
 
   /* countdown */
   #count{position:absolute;inset:0;z-index:8;display:none;align-items:center;justify-content:center;
@@ -148,6 +183,8 @@
 <body>
 
   <div id="stage">
+    <video id="cam" class="mir" autoplay muted playsinline></video>
+    <div id="scrim"></div>
     <div id="bar"></div>
     <div id="mirror">
       <div id="script"><div id="feed"></div></div>
@@ -169,9 +206,22 @@
     <button class="ic" id="mirrorBtn" title="Cermin">↔</button>
   </div>
 
+  <button id="recBtn" class="hidden" title="Rekam / berhenti" aria-label="Rekam"></button>
+  <div id="recTime" class="hidden">● 00:00</div>
+  <div id="toast"></div>
+
+  <div id="saveCard" class="hidden">
+    <p class="lbl">Hasil rekaman</p>
+    <video id="savePreview" controls playsinline></video>
+    <div class="saverow">
+      <a id="saveDl" download>⤓ Simpan video</a>
+      <button id="saveClose">Tutup</button>
+    </div>
+  </div>
+
   <div id="panel">
     <div class="grab">
-      <div class="brand"><span class="dot"></span>DIDIKHAND TELEPROMPTER</div>
+      <div class="brand"><span class="dot"></span> TELEPROMPTER</div>
       <button class="close" id="closeBtn" aria-label="Tutup panel">▾</button>
     </div>
     <div class="scroll">
@@ -244,6 +294,31 @@ Selamat merekam!</textarea>
         </div>
       </div>
 
+      <div class="fld">
+        <span class="cap">Kamera perekam</span>
+        <div class="toggles">
+          <button class="chip" id="cam-chip">📷 Nyalakan kamera</button>
+          <button class="chip on" id="audio-chip">🔊 Rekam suara</button>
+          <button class="chip on" id="cammir-chip">Cermin kamera</button>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="fld">
+          <span class="cap">Pilih kamera</span>
+          <div class="seg" id="facing">
+            <button data-f="user" class="on">Depan</button>
+            <button data-f="environment">Belakang</button>
+          </div>
+        </div>
+        <label class="fld">
+          <span class="cap">Redup latar · <span class="val" id="dimVal">35</span>%</span>
+          <input type="range" id="dim" min="0" max="85" value="35">
+        </label>
+      </div>
+
+      <p class="est" id="camNote">Rekaman berisi video kamera + suara — teks di layar tidak ikut terekam. Perlu izin kamera dan halaman HTTPS (atau localhost / aplikasi).</p>
+
       <p class="est">Estimasi durasi: <b id="estVal">–</b> · <span id="wordVal">0</span> kata</p>
 
       <button id="startBtn">▶ Mulai dari atas</button>
@@ -263,7 +338,8 @@ Selamat merekam!</textarea>
     text:$('text').value,
     speed:30,size:8,lh:15,col:92,
     font:"system-ui,-apple-system,sans-serif",color:'#ffffff',
-    mirrorX:false,mirrorY:false,guide:true,countdown:true
+    mirrorX:false,mirrorY:false,guide:true,countdown:true,
+    facing:'user',camMirror:true,audio:true,dim:35
   };
   try{var s=localStorage.getItem('tp-state');if(s)state=Object.assign(state,JSON.parse(s));}catch(e){}
   function save(){try{localStorage.setItem('tp-state',JSON.stringify(state));}catch(e){}}
@@ -285,6 +361,8 @@ Selamat merekam!</textarea>
     mirror.style.transform=t.trim();
     stage.classList.toggle('noguide',!state.guide);
     $('mirrorBtn').classList.toggle('on',state.mirrorX||state.mirrorY);
+    r.setProperty('--dim',(state.dim/100).toFixed(2));
+    if(cam) cam.classList.toggle('mir',state.camMirror);
   }
 
   function setText(){ feed.textContent=state.text; }
@@ -460,6 +538,114 @@ Selamat merekam!</textarea>
   window.addEventListener('resize',measure);
   window.addEventListener('orientationchange',function(){ setTimeout(measure,300); });
   if(document.fonts&&document.fonts.ready) document.fonts.ready.then(measure);
+
+  // ---- camera + recording ----
+  var cam=$('cam'), recBtn=$('recBtn'), recTime=$('recTime'),
+      saveCard=$('saveCard'), savePreview=$('savePreview'), saveDl=$('saveDl'), toastEl=$('toast');
+  var camStream=null, camOn=false, recorder=null, chunks=[], recT0=0, recIv=null, lastUrl=null, toastTimer=null;
+
+  function toast(msg){ toastEl.textContent=msg; toastEl.style.display='block';
+    clearTimeout(toastTimer); toastTimer=setTimeout(function(){ toastEl.style.display='none'; },4000); }
+
+  function secureCam(){ return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia); }
+
+  function setCamChip(on){ $('cam-chip').classList.toggle('on',on);
+    $('cam-chip').textContent = on ? '📷 Matikan kamera' : '📷 Nyalakan kamera'; }
+
+  function stopStream(){ if(camStream){ camStream.getTracks().forEach(function(t){ t.stop(); }); camStream=null; } }
+
+  async function startCamera(){
+    if(!secureCam()){ toast('Kamera butuh alamat HTTPS (atau localhost / aplikasi). Buka lewat versi hosting/PWA.'); setCamChip(false); return; }
+    try{
+      if(recorder && recorder.state==='recording') stopRec();
+      stopStream();
+      camStream = await navigator.mediaDevices.getUserMedia({
+        video:{ facingMode: state.facing, width:{ideal:1920}, height:{ideal:1080} },
+        audio: state.audio
+      });
+      cam.srcObject = camStream; cam.muted = true;
+      try{ await cam.play(); }catch(e){}
+      camOn = true; setCamChip(true); recBtn.classList.remove('hidden');
+    }catch(e){
+      camOn=false; setCamChip(false);
+      var n=(e && e.name) || 'Error';
+      if(n==='NotAllowedError') toast('Izin kamera ditolak. Aktifkan izin kamera/mikrofon lalu coba lagi.');
+      else if(n==='NotFoundError') toast('Kamera tidak ditemukan di perangkat ini.');
+      else toast('Tidak bisa mengakses kamera ('+n+').');
+    }
+  }
+  function stopCamera(){
+    if(recorder && recorder.state!=='inactive') stopRec();
+    stopStream(); cam.srcObject=null; camOn=false;
+    setCamChip(false); recBtn.classList.add('hidden'); recBtn.classList.remove('rec'); recTime.classList.add('hidden');
+  }
+
+  function pickMime(){
+    if(!window.MediaRecorder) return null;
+    var list=['video/mp4;codecs=h264,aac','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+    for(var i=0;i<list.length;i++){ try{ if(MediaRecorder.isTypeSupported(list[i])) return list[i]; }catch(e){} }
+    return '';
+  }
+  function stamp(){ var d=new Date(); function p(n){ return (n<10?'0':'')+n; }
+    return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds()); }
+
+  function startRec(){
+    if(!camStream){ toast('Nyalakan kamera dulu.'); return; }
+    if(!window.MediaRecorder){ toast('Perekaman video tidak didukung di browser ini.'); return; }
+    chunks=[];
+    var mime=pickMime();
+    try{ recorder = new MediaRecorder(camStream, mime ? {mimeType:mime, videoBitsPerSecond:8000000} : undefined); }
+    catch(e){ try{ recorder = new MediaRecorder(camStream); }catch(e2){ toast('Perekaman gagal dimulai.'); return; } }
+    recorder.ondataavailable=function(e){ if(e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop=function(){
+      var type=(recorder && recorder.mimeType) || mime || 'video/webm';
+      var blob=new Blob(chunks,{type:type});
+      showSave(blob,type);
+    };
+    recorder.start();
+    recT0=Date.now(); tickRec(); recIv=setInterval(tickRec,250);
+    recBtn.classList.add('rec'); recTime.classList.remove('hidden');
+  }
+  function stopRec(){
+    try{ if(recorder && recorder.state!=='inactive') recorder.stop(); }catch(e){}
+    clearInterval(recIv); recBtn.classList.remove('rec'); recTime.classList.add('hidden');
+  }
+  function toggleRec(){ if(recorder && recorder.state==='recording') stopRec(); else startRec(); }
+  function tickRec(){ var s=Math.floor((Date.now()-recT0)/1000);
+    var m=Math.floor(s/60), ss=s%60; recTime.textContent='● '+(m<10?'0':'')+m+':'+(ss<10?'0':'')+ss; }
+
+  function showSave(blob,type){
+    if(lastUrl){ URL.revokeObjectURL(lastUrl); lastUrl=null; }
+    lastUrl=URL.createObjectURL(blob);
+    savePreview.src=lastUrl;
+    var ext=(type.indexOf('mp4')>=0)?'mp4':'webm';
+    saveDl.href=lastUrl; saveDl.setAttribute('download','teleprompter-'+stamp()+'.'+ext);
+    saveCard.classList.remove('hidden');
+  }
+
+  // camera control bindings
+  $('cam-chip').addEventListener('click',function(){ if(camOn) stopCamera(); else startCamera(); });
+  $('audio-chip').addEventListener('click',function(){ state.audio=!state.audio; this.classList.toggle('on',state.audio); save(); if(camOn) startCamera(); });
+  $('cammir-chip').addEventListener('click',function(){ state.camMirror=!state.camMirror; this.classList.toggle('on',state.camMirror); cam.classList.toggle('mir',state.camMirror); save(); });
+  document.querySelectorAll('#facing button').forEach(function(b){
+    b.addEventListener('click',function(){
+      state.facing=this.dataset.f;
+      document.querySelectorAll('#facing button').forEach(function(x){ x.classList.remove('on'); });
+      this.classList.add('on'); save();
+      if(camOn) startCamera();
+    });
+  });
+  $('dim').addEventListener('input',function(){ state.dim=+this.value; $('dimVal').textContent=this.value; applyStyle(); save(); });
+  recBtn.addEventListener('click',function(e){ e.stopPropagation(); toggleRec(); });
+  $('saveClose').addEventListener('click',function(){ saveCard.classList.add('hidden'); try{ savePreview.pause(); }catch(_){} });
+  window.addEventListener('pagehide',stopCamera);
+
+  // reflect saved camera settings
+  $('audio-chip').classList.toggle('on',state.audio);
+  $('cammir-chip').classList.toggle('on',state.camMirror);
+  document.querySelectorAll('#facing button').forEach(function(b){ b.classList.toggle('on',b.dataset.f===state.facing); });
+  $('dim').value=state.dim; $('dimVal').textContent=state.dim;
+  cam.classList.toggle('mir',state.camMirror);
 
   // ---- init ----
   applyStyle(); setText(); reflectSpeed();
